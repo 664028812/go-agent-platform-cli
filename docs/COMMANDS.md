@@ -1,6 +1,6 @@
 # gap 命令文档
 
-`gap` 是独立脚手架 `go-agent-platform-cli` 编译出的命令。当前版本为 `0.4.1`。
+`gap` 是独立脚手架 `go-agent-platform-cli` 编译出的命令。当前版本为 `0.5.0`。
 
 它参考 `/Users/mac/Projects/sail/earn/app/server`，将该目录视为一个独立工程根：
 
@@ -8,6 +8,8 @@
 project/
   main.go
   Makefile
+  api/proto/       # Protobuf source contracts
+  api/gen/go/      # generated protobuf/grpc Go code
   hack/
   manifest/
   api/
@@ -68,6 +70,22 @@ make build
 ```
 
 项目名中的 `-` 会原样保留。
+
+## 初始化与启动
+
+新项目在首次使用时执行：
+
+```bash
+cd gap-test
+make deps
+make ent-gen
+docker compose -f manifest/docker/docker-compose.yml up -d
+make run
+```
+
+`make deps` 固定并下载 Gin、Viper、pgx、Redis、Ent、OpenTelemetry 和 Protobuf 依赖，同时更新 `go.sum`。服务启动路径会：加载 Viper YAML 配置并应用环境变量覆盖，连接并 Ping PostgreSQL，连接并 Ping Redis，随后启动 Gin。任一基础设施不可用时进程会返回错误，不会错误地报告服务已就绪。
+
+Gin 默认注册 `/healthz` 与 `/readyz`。`/readyz` 会检查 PostgreSQL 和 Redis；中间件依次提供 request ID、panic recovery、结构化访问日志、请求超时、body 限制、CORS 与 OpenTelemetry span。认证和限流中间件作为可注入扩展点，业务路由按权限策略自行挂载。
 
 ## 生成完整模块
 
@@ -162,7 +180,22 @@ Ent 的目录职责固定如下：
 
 `make ent-new` 会下载并写入 `entgo.io/ent` 依赖，然后在正确的 schema 目录创建实体。`make ent-gen` 重新生成 Ent 代码；`make dao` 发现 schema 时也会自动调用它。
 
-生成项目的 `go.mod` 默认固定 `entgo.io/ent v0.14.6`，并预置对应的 `go.sum` 校验和，因此 IDE 和首次 `go test` 都能立即解析 schema 的 Ent import。`make deps` 与 `make ent-gen` 会继续补齐和更新生成器及其他基础设施的依赖校验和。
+生成项目的 `go.mod` 默认固定 Ent、Gin、Viper、pgx、Redis、OpenTelemetry 与 Protobuf 版本；Ent 的基础校验和已预置。首次运行 `make deps` 会补齐其余依赖的 `go.sum`，之后再执行 `go test ./...`。
+
+## Protobuf
+
+Protobuf 的职责边界如下：
+
+- `api/proto/<domain>/v1/*.proto`：手写、版本化的跨服务契约；例如 `api/proto/platform/v1/health.proto`
+- `api/gen/go/`：Buf 生成的 Go protobuf 与 gRPC 文件，不手改
+- `buf.yaml`、`buf.gen.yaml`：Buf 模块、lint 和插件配置
+
+```bash
+make proto-lint
+make proto-gen
+```
+
+`proto-gen` 使用 Buf remote plugins 输出 Go 与 gRPC 代码到 `api/gen/go`，并在生成后执行 `go mod tidy`。后续微服务调用只依赖 `api/gen/go` 生成包，HTTP DTO 仍留在现有 `api/<module>/v1`，两者不要混用。
 
 ## Make 命令
 

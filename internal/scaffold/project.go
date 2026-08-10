@@ -20,6 +20,8 @@ func projectDirs() []string {
 		"manifest/config",
 		"manifest/docker",
 		"manifest/deploy",
+		"api/proto/platform/v1",
+		"api/gen/go",
 		"docs",
 		"migrations",
 		"internal/controller",
@@ -33,6 +35,7 @@ func projectDirs() []string {
 		"internal/platform/server",
 		"internal/platform/middleware",
 		"internal/platform/storage/ent/schema",
+		"internal/platform/storage",
 		"internal/platform/auth",
 		"internal/platform/cache",
 		"internal/platform/queue",
@@ -52,72 +55,47 @@ func projectDirs() []string {
 // projectFiles 项目级固定文件（不随模块变化）
 func projectFiles(name string, modulePath string) map[string]string {
 	files := map[string]string{
-		"go.mod":                             projectGoMod(modulePath),
-		"go.sum":                             projectGoSum(),
-		"README.md":                          projectReadme(name),
-		"Makefile":                           projectMakefile(),
-		"hack/hack.mk":                       projectHackMakefile(),
-		"hack/hack-cli.mk":                   projectHackCLIMakefile(),
-		".env.example":                       projectEnvExample(),
-		"manifest/config/config.local.yaml":  projectConfig("local"),
-		"manifest/config/config.dev.yaml":    projectConfig("dev"),
-		"manifest/config/config.prod.yaml":   projectConfig("prod"),
-		"manifest/docker/docker-compose.yml": projectCompose(),
-		"docs/README.md":                     docsReadme(name),
-		"migrations/.gitkeep":                "",
-		"main.go":                            standaloneMainFile(modulePath),
-		"cmd/worker/main.go":                 mainFile(modulePath, "Worker", "RunWorker"),
-		"cmd/mcp-server/main.go":             mainFile(modulePath, "MCPServer", "RunMCPServer"),
-		"internal/platform/cmd/server.go":    serverCommandFile(modulePath),
-		"internal/platform/consts/app.go":    "package consts\n\nconst ServiceName = \"" + name + "\"\n",
-		"internal/platform/cmd/worker.go":    workerCommandFile(modulePath),
-		"internal/platform/cmd/mcp.go":       mcpCommandFile(modulePath),
-		"internal/platform/config/config.go": configTypes(),
-		"internal/platform/config/loader.go": configLoader(),
-		"internal/platform/server/router.go": `package server
-
-type Route struct {
-	Method string
-	Path   string
-}
-
-func Routes() []Route {
-	return []Route{
-		{Method: "GET", Path: "/healthz"},
-		{Method: "GET", Path: "/readyz"},
-		{Method: "POST", Path: "/api/v1/runs"},
-	}
-}
-`,
-		"internal/platform/server/http_server.go": `package server
-
-type HTTPServer struct {
-	Addr string
-}
-
-func NewHTTPServer(addr string) HTTPServer {
-	return HTTPServer{Addr: addr}
-}
-`,
-		"internal/platform/server/response.go": `package server
-
-type Response struct {
-	Code    string ` + "`json:\"code\"`" + `
-	Message string ` + "`json:\"message\"`" + `
-	Data    any    ` + "`json:\"data,omitempty\"`" + `
-}
-`,
-		"internal/platform/middleware/request_id.go": `package middleware` + "\n\n" + `const RequestIDHeader = "X-Request-ID"` + "\n",
-		"internal/platform/middleware/recover.go":    middlewarePlaceholder("Recover"),
-		"internal/platform/middleware/timeout.go":    middlewarePlaceholder("Timeout"),
-		"internal/platform/middleware/access_log.go": middlewarePlaceholder("AccessLog"),
-		"internal/platform/middleware/auth.go":       middlewarePlaceholder("Auth"),
-		"internal/platform/middleware/rate_limit.go": middlewarePlaceholder("RateLimit"),
-		"internal/platform/middleware/otel.go":       middlewarePlaceholder("OTel"),
+		"go.mod":                                     projectGoMod(modulePath),
+		"go.sum":                                     projectGoSum(),
+		"buf.yaml":                                   bufConfig(),
+		"buf.gen.yaml":                               bufGenerateConfig(),
+		"api/proto/platform/v1/health.proto":         protoHealthFile(modulePath),
+		"README.md":                                  projectReadme(name),
+		"Makefile":                                   projectMakefile(),
+		"hack/hack.mk":                               projectHackMakefile(),
+		"hack/hack-cli.mk":                           projectHackCLIMakefile(),
+		".env.example":                               projectEnvExample(),
+		"manifest/config/config.local.yaml":          projectConfig("local"),
+		"manifest/config/config.dev.yaml":            projectConfig("dev"),
+		"manifest/config/config.prod.yaml":           projectConfig("prod"),
+		"manifest/docker/docker-compose.yml":         projectCompose(),
+		"docs/README.md":                             docsReadme(name),
+		"migrations/.gitkeep":                        "",
+		"main.go":                                    standaloneMainFile(modulePath),
+		"cmd/worker/main.go":                         mainFile(modulePath, "Worker", "RunWorker"),
+		"cmd/mcp-server/main.go":                     mainFile(modulePath, "MCPServer", "RunMCPServer"),
+		"internal/platform/cmd/server.go":            serverCommandFile(modulePath),
+		"internal/platform/consts/app.go":            "package consts\n\nconst ServiceName = \"" + name + "\"\n",
+		"internal/platform/cmd/worker.go":            workerCommandFile(modulePath),
+		"internal/platform/cmd/mcp.go":               mcpCommandFile(modulePath),
+		"internal/platform/config/config.go":         configTypes(),
+		"internal/platform/config/loader.go":         configLoader(),
+		"internal/platform/server/router.go":         routerFile(),
+		"internal/platform/server/http_server.go":    httpServerFile(modulePath),
+		"internal/platform/server/response.go":       responseServerFile(),
+		"internal/platform/middleware/request_id.go": requestIDMiddlewareFile(),
+		"internal/platform/middleware/recover.go":    recoveryMiddlewareFile(),
+		"internal/platform/middleware/timeout.go":    timeoutMiddlewareFile(),
+		"internal/platform/middleware/access_log.go": accessLogMiddlewareFile(),
+		"internal/platform/middleware/body_limit.go": bodyLimitMiddlewareFile(),
+		"internal/platform/middleware/cors.go":       corsMiddlewareFile(),
+		"internal/platform/middleware/auth.go":       authMiddlewareFile(modulePath),
+		"internal/platform/middleware/rate_limit.go": rateLimitMiddlewareFile(),
+		"internal/platform/middleware/otel.go":       otelMiddlewareFile(),
 		"internal/platform/auth/jwt.go":              `package auth` + "\n\n" + `type TokenManager struct { Secret string }` + "\n",
 		"internal/platform/auth/rbac.go":             rbacFile(),
 		"internal/platform/auth/principal.go":        principalFile(),
-		"internal/platform/cache/redis.go":           `package cache` + "\n\n" + `type RedisClient struct { Addr string }` + "\n",
+		"internal/platform/cache/redis.go":           redisFile(modulePath),
 		"internal/platform/cache/lock.go":            `package cache` + "\n\n" + `type Lock struct { Key string }` + "\n",
 		"internal/platform/cache/rate_limiter.go":    `package cache` + "\n\n" + `type RateLimiter struct { RequestsPerMinute int }` + "\n",
 		"internal/platform/cache/cache_aside.go":     `package cache` + "\n\n" + `type CacheAside struct{}` + "\n",
@@ -127,7 +105,7 @@ type Response struct {
 		"internal/platform/queue/worker_pool.go":     `package queue` + "\n\n" + `type WorkerPool struct { Concurrency int }` + "\n",
 		"internal/platform/queue/retry.go":           `package queue` + "\n\n" + `type RetryPolicy struct { MaxRetries int }` + "\n",
 		"internal/platform/queue/dead_letter.go":     `package queue` + "\n\n" + `type DeadLetter struct { JobID string; Error string }` + "\n",
-		"internal/platform/observability/logger.go":  `package observability` + "\n\n" + `type Logger struct { ServiceName string }` + "\n",
+		"internal/platform/observability/logger.go":  loggerFile(modulePath),
 		"internal/platform/observability/metrics.go": `package observability` + "\n\n" + `type Metrics struct { Port int }` + "\n",
 		"internal/platform/observability/tracing.go": `package observability` + "\n\n" + `type Tracing struct { Endpoint string }` + "\n",
 		"internal/platform/storage/ent/generate.go": `package ent
@@ -143,6 +121,7 @@ import _ "entgo.io/ent/cmd/ent"
 `,
 		"internal/platform/storage/ent/client.go": entClientFile(),
 		"internal/platform/storage/ent/tx.go":     `package ent` + "\n\n" + `type Tx struct{}` + "\n",
+		"internal/platform/storage/postgres.go":   postgresFile(modulePath),
 		"internal/agent/runs/state_machine.go":    runStateMachineFile(),
 		"internal/agent/runs/statistics.go":       `package runs` + "\n\n" + `type Statistics struct { TotalRuns int64; SuccessRuns int64; FailedRuns int64 }` + "\n",
 		"internal/agent/runs/events.go":           `package runs` + "\n\n" + `type Event struct { RunID string; Type string }` + "\n",
@@ -181,7 +160,16 @@ func projectGoMod(modulePath string) string {
 
 go 1.25.6
 
-require entgo.io/ent v0.14.6
+require (
+	entgo.io/ent v0.14.6
+	github.com/gin-gonic/gin v1.12.0
+	github.com/jackc/pgx/v5 v5.10.0
+	github.com/redis/go-redis/v9 v9.22.0
+	github.com/spf13/viper v1.21.0
+	go.opentelemetry.io/otel v1.45.0
+	google.golang.org/grpc v1.83.0
+	google.golang.org/protobuf v1.36.11
+)
 `, modulePath)
 }
 
@@ -189,6 +177,52 @@ func projectGoSum() string {
 	return `entgo.io/ent v0.14.6 h1:/f2696BpwuWAEEG6PVGWflg6+Inrpq4pRWuNlWz/Skk=
 entgo.io/ent v0.14.6/go.mod h1:z46QBUdGC+BATwsedbDuREfSS0oSCV+csdEYlL4p73s=
 `
+}
+
+func bufConfig() string {
+	return `version: v2
+modules:
+  - path: api/proto
+lint:
+  use:
+    - STANDARD
+breaking:
+  use:
+    - FILE
+`
+}
+
+func bufGenerateConfig() string {
+	return `version: v2
+plugins:
+  - remote: buf.build/protocolbuffers/go
+    out: api/gen/go
+    opt:
+      - paths=source_relative
+  - remote: buf.build/grpc/go
+    out: api/gen/go
+    opt:
+      - paths=source_relative
+`
+}
+
+func protoHealthFile(modulePath string) string {
+	return fmt.Sprintf(`syntax = "proto3";
+
+package platform.v1;
+
+option go_package = "%s/api/gen/go/platform/v1;platformv1";
+
+service HealthService {
+  rpc Check(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+message HealthCheckRequest {}
+
+message HealthCheckResponse {
+  string status = 1;
+}
+`, modulePath)
 }
 
 func projectReadme(name string) string {
@@ -228,11 +262,13 @@ internal/model/          # internal inputs and outputs
 internal/dao/            # Ent data access wrappers
 internal/platform/       # app infra: cmd/config/server/middleware/storage/auth/cache/queue/observability
 internal/agent/          # AI capabilities: eino/tools/knowledge/workflow/mcp/eval/runs
+api/proto/               # protobuf source contracts, grouped by domain and version
+api/gen/go/              # Buf-generated Go protobuf/grpc code
 manifest/                # config and Docker Compose
 hack/                    # Make targets, following earn/app/server
 ~~~
 
-`+"运行 `make deps` 后可执行 `make ent-gen`，验证默认的 `TestRecord` schema 已生成 Ent 代码。\n", name)
+`+"首次执行 `make deps` 安装 Gin、Viper、pgx、Redis、Ent 与可观测性依赖；再执行 `make ent-gen` 生成默认 `TestRecord` 的 Ent 代码。服务启动时会分别 Ping PostgreSQL 和 Redis，连接失败会阻止应用进入可服务状态。\n", name)
 }
 
 func projectMakefile() string {
@@ -255,7 +291,7 @@ cli.install:
 func projectHackMakefile() string {
 	return `.DEFAULT_GOAL := build
 
-.PHONY: build ctrl service dao fmt test run deps ent-new ent-gen compose-up compose-down clean
+.PHONY: build ctrl service dao fmt test run deps ent-new ent-gen proto-gen proto-lint compose-up compose-down clean
 
 build: cli.install
 	mkdir -p bin
@@ -287,8 +323,12 @@ deps:
 	go get github.com/spf13/viper
 	go get entgo.io/ent
 	go get github.com/redis/go-redis/v9
+	go get github.com/jackc/pgx/v5
 	go get go.opentelemetry.io/otel
 	go get github.com/prometheus/client_golang/prometheus
+	go get google.golang.org/grpc
+	go get google.golang.org/protobuf
+	go mod tidy
 
 ent-new:
 	@test -n "$${NAME}" || (echo "NAME is required, example: make ent-new NAME=User" && exit 1)
@@ -303,6 +343,15 @@ ent-gen:
 	go get entgo.io/ent/cmd/ent
 	go mod tidy
 	GOFLAGS=-mod=mod GOCACHE=/tmp/go-agent-platform-cache go run -mod=mod entgo.io/ent/cmd/ent generate ./internal/platform/storage/ent/schema
+
+proto-gen:
+	@command -v buf >/dev/null 2>&1 || (echo "buf is required; install it from https://buf.build/docs/installation" && exit 1)
+	buf generate
+	go mod tidy
+
+proto-lint:
+	@command -v buf >/dev/null 2>&1 || (echo "buf is required; install it from https://buf.build/docs/installation" && exit 1)
+	buf lint
 
 compose-up:
 	docker compose -f manifest/docker/docker-compose.yml up -d
@@ -320,6 +369,9 @@ func projectEnvExample() string {
 CONFIG_PATH=manifest/config/config.local.yaml
 DATABASE_DSN=postgres://agent:agent@localhost:5432/agent_platform?sslmode=disable
 REDIS_ADDR=localhost:6379
+REDIS_PASSWORD=
+REDIS_DB=0
+HTTP_ALLOWED_ORIGINS=http://localhost:3000
 JWT_SECRET=local-dev-secret
 EINO_PROVIDER=mock
 EINO_MODEL=mock-chat
@@ -340,6 +392,8 @@ http:
   idle_timeout: 60s
   request_timeout: 30s
   body_limit: 10485760
+  allowed_origins:
+    - http://localhost:3000
 
 database:
   driver: postgres
@@ -347,10 +401,14 @@ database:
   max_open_conns: 20
   max_idle_conns: 10
   conn_max_lifetime: 1h
+  connect_timeout: 5s
 
 redis:
   addr: localhost:6379
+  password: ""
   db: 0
+  connect_timeout: 3s
+  pool_size: 10
 
 auth:
   jwt_secret: local-dev-secret
@@ -404,13 +462,18 @@ func standaloneMainFile(modulePath string) string {
 import (
 	"context"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"%s/internal/platform/cmd"
 	_ "%s/internal/logic"
 )
 
 func main() {
-	if err := cmd.Run(context.Background()); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := cmd.Run(ctx); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -423,12 +486,17 @@ func mainFile(modulePath string, appName string, runFunc string) string {
 import (
 	"context"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"%s/internal/platform/cmd"
 )
 
 func main() {
-	if err := cmd.%s(context.Background()); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := cmd.%s(ctx); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -440,16 +508,49 @@ func serverCommandFile(modulePath string) string {
 
 import (
 	"context"
+	"fmt"
 
+	"%s/internal/platform/cache"
 	"%s/internal/platform/config"
+	"%s/internal/platform/observability"
+	"%s/internal/platform/server"
+	"%s/internal/platform/storage"
+	entstore "%s/internal/platform/storage/ent"
 )
 
 func Run(ctx context.Context) error {
-	_, err := config.Load()
-	_ = ctx
-	return err
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	logger := observability.NewLogger(cfg.Observability)
+	db, err := storage.OpenPostgres(ctx, cfg.Database)
+	if err != nil {
+		return fmt.Errorf("open postgres: %%w", err)
+	}
+	defer db.Close()
+	entClient, err := entstore.Open(cfg.Database.Driver, cfg.Database.DSN)
+	if err != nil {
+		return fmt.Errorf("open ent client: %%w", err)
+	}
+	defer entClient.Close()
+	redisClient, err := cache.OpenRedis(ctx, cfg.Redis)
+	if err != nil {
+		return fmt.Errorf("open redis: %%w", err)
+	}
+	defer redisClient.Close()
+
+	app := server.NewHTTPServer(cfg, logger, server.Dependencies{
+		Ready: func(checkCtx context.Context) error {
+			if err := storage.Ping(checkCtx, db); err != nil {
+				return err
+			}
+			return cache.Ping(checkCtx, redisClient)
+		},
+	})
+	return app.Run(ctx)
 }
-`, modulePath)
+`, modulePath, modulePath, modulePath, modulePath, modulePath, modulePath)
 }
 
 func workerCommandFile(modulePath string) string {
@@ -545,47 +646,52 @@ func configTypes() string {
 import "time"
 
 type Config struct {
-	App           AppConfig
-	HTTP          HTTPConfig
-	Database      DatabaseConfig
-	Redis         RedisConfig
-	Auth          AuthConfig
-	Worker        WorkerConfig
-	Eino          EinoConfig
-	Observability ObservabilityConfig
+	App           AppConfig           ` + "`mapstructure:\"app\"`" + `
+	HTTP          HTTPConfig          ` + "`mapstructure:\"http\"`" + `
+	Database      DatabaseConfig      ` + "`mapstructure:\"database\"`" + `
+	Redis         RedisConfig         ` + "`mapstructure:\"redis\"`" + `
+	Auth          AuthConfig          ` + "`mapstructure:\"auth\"`" + `
+	Worker        WorkerConfig        ` + "`mapstructure:\"worker\"`" + `
+	Eino          EinoConfig          ` + "`mapstructure:\"eino\"`" + `
+	Observability ObservabilityConfig ` + "`mapstructure:\"observability\"`" + `
 }
 
 type AppConfig struct {
-	Name            string
-	Env             string
-	Port            int
-	ShutdownTimeout time.Duration
+	Name            string        ` + "`mapstructure:\"name\"`" + `
+	Env             string        ` + "`mapstructure:\"env\"`" + `
+	Port            int           ` + "`mapstructure:\"port\"`" + `
+	ShutdownTimeout time.Duration ` + "`mapstructure:\"shutdown_timeout\"`" + `
 }
 
 type HTTPConfig struct {
-	ReadTimeout    time.Duration
-	WriteTimeout   time.Duration
-	IdleTimeout    time.Duration
-	RequestTimeout time.Duration
-	BodyLimit      int64
+	ReadTimeout    time.Duration ` + "`mapstructure:\"read_timeout\"`" + `
+	WriteTimeout   time.Duration ` + "`mapstructure:\"write_timeout\"`" + `
+	IdleTimeout    time.Duration ` + "`mapstructure:\"idle_timeout\"`" + `
+	RequestTimeout time.Duration ` + "`mapstructure:\"request_timeout\"`" + `
+	BodyLimit      int64         ` + "`mapstructure:\"body_limit\"`" + `
+	AllowedOrigins []string      ` + "`mapstructure:\"allowed_origins\"`" + `
 }
 
 type DatabaseConfig struct {
-	Driver          string
-	DSN             string
-	MaxOpenConns    int
-	MaxIdleConns    int
-	ConnMaxLifetime time.Duration
+	Driver          string        ` + "`mapstructure:\"driver\"`" + `
+	DSN             string        ` + "`mapstructure:\"dsn\"`" + `
+	MaxOpenConns    int           ` + "`mapstructure:\"max_open_conns\"`" + `
+	MaxIdleConns    int           ` + "`mapstructure:\"max_idle_conns\"`" + `
+	ConnMaxLifetime time.Duration ` + "`mapstructure:\"conn_max_lifetime\"`" + `
+	ConnectTimeout  time.Duration ` + "`mapstructure:\"connect_timeout\"`" + `
 }
 
 type RedisConfig struct {
-	Addr string
-	DB   int
+	Addr            string        ` + "`mapstructure:\"addr\"`" + `
+	Password        string        ` + "`mapstructure:\"password\"`" + `
+	DB              int           ` + "`mapstructure:\"db\"`" + `
+	ConnectTimeout  time.Duration ` + "`mapstructure:\"connect_timeout\"`" + `
+	PoolSize        int           ` + "`mapstructure:\"pool_size\"`" + `
 }
 
 type AuthConfig struct {
-	JWTSecret      string
-	AccessTokenTTL time.Duration
+	JWTSecret      string        ` + "`mapstructure:\"jwt_secret\"`" + `
+	AccessTokenTTL time.Duration ` + "`mapstructure:\"access_token_ttl\"`" + `
 }
 
 type WorkerConfig struct {
@@ -604,9 +710,9 @@ type EinoConfig struct {
 }
 
 type ObservabilityConfig struct {
-	ServiceName  string
-	OTLPEndpoint string
-	MetricsPort  int
+	ServiceName  string ` + "`mapstructure:\"service_name\"`" + `
+	OTLPEndpoint string ` + "`mapstructure:\"otlp_endpoint\"`" + `
+	MetricsPort  int    ` + "`mapstructure:\"metrics_port\"`" + `
 }
 `
 }
@@ -615,65 +721,491 @@ func configLoader() string {
 	return `package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
-	"time"
+	"strings"
+
+	"github.com/spf13/viper"
 )
 
 func Load() (Config, error) {
-	port := envInt("APP_PORT", 8080)
-	return Config{
-		App: AppConfig{
-			Name:            env("APP_NAME", "go-agent-platform"),
-			Env:             env("APP_ENV", "local"),
-			Port:            port,
-			ShutdownTimeout: 10 * time.Second,
-		},
-		Database: DatabaseConfig{
-			Driver: "postgres",
-			DSN:    env("DATABASE_DSN", "postgres://agent:agent@localhost:5432/agent_platform?sslmode=disable"),
-		},
-		Redis: RedisConfig{Addr: env("REDIS_ADDR", "localhost:6379")},
-		Auth:  AuthConfig{JWTSecret: env("JWT_SECRET", "local-dev-secret"), AccessTokenTTL: 2 * time.Hour},
-		Worker: WorkerConfig{
-			WorkerID:     env("WORKER_ID", "local-worker-1"),
-			Concurrency:  8,
-			PollInterval: time.Second,
-			LockTTL:      time.Minute,
-			MaxRetries:   3,
-		},
-		Eino: EinoConfig{
-			Provider: env("EINO_PROVIDER", "mock"),
-			Model:    env("EINO_MODEL", "mock-chat"),
-			Timeout:  time.Minute,
-			MaxSteps: 8,
-		},
-		Observability: ObservabilityConfig{
-			ServiceName:  env("OTEL_SERVICE_NAME", "go-agent-platform"),
-			OTLPEndpoint: env("OTLP_ENDPOINT", "localhost:4317"),
-			MetricsPort:  9090,
-		},
-	}, nil
+	v := viper.New()
+	v.SetConfigFile(configPath())
+	if err := v.ReadInConfig(); err != nil {
+		return Config{}, fmt.Errorf("read config: %w", err)
+	}
+	var cfg Config
+	if err := v.Unmarshal(&cfg); err != nil {
+		return Config{}, fmt.Errorf("decode config: %w", err)
+	}
+	if err := applyEnv(&cfg); err != nil {
+		return Config{}, err
+	}
+	return cfg, cfg.Validate()
 }
 
-func env(key string, fallback string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		return fallback
+func (c Config) Validate() error {
+	if c.App.Port <= 0 || c.Database.DSN == "" || c.Redis.Addr == "" {
+		return fmt.Errorf("app.port, database.dsn and redis.addr are required")
 	}
-	return value
+	return nil
 }
 
-func envInt(key string, fallback int) int {
-	value := os.Getenv(key)
-	if value == "" {
-		return fallback
+func configPath() string {
+	if path := os.Getenv("CONFIG_PATH"); path != "" {
+		return path
 	}
+	return "manifest/config/config.local.yaml"
+}
+
+func applyEnv(cfg *Config) error {
+	cfg.App.Env = envString("APP_ENV", cfg.App.Env)
+	cfg.App.Name = envString("APP_NAME", cfg.App.Name)
+	cfg.Database.DSN = envString("DATABASE_DSN", cfg.Database.DSN)
+	cfg.Redis.Addr = envString("REDIS_ADDR", cfg.Redis.Addr)
+	cfg.Redis.Password = envString("REDIS_PASSWORD", cfg.Redis.Password)
+	if origins := os.Getenv("HTTP_ALLOWED_ORIGINS"); origins != "" { cfg.HTTP.AllowedOrigins = strings.Split(origins, ",") }
+	cfg.Auth.JWTSecret = envString("JWT_SECRET", cfg.Auth.JWTSecret)
+	cfg.Eino.Provider = envString("EINO_PROVIDER", cfg.Eino.Provider)
+	cfg.Eino.Model = envString("EINO_MODEL", cfg.Eino.Model)
+	cfg.Observability.OTLPEndpoint = envString("OTLP_ENDPOINT", cfg.Observability.OTLPEndpoint)
+	var err error
+	if cfg.App.Port, err = envInt("APP_PORT", cfg.App.Port); err != nil { return err }
+	if cfg.Redis.DB, err = envInt("REDIS_DB", cfg.Redis.DB); err != nil { return err }
+	return nil
+}
+
+func envString(key, fallback string) string {
+	if value := os.Getenv(key); value != "" { return value }
+	return fallback
+}
+
+func envInt(key string, fallback int) (int, error) {
+	value := os.Getenv(key)
+	if value == "" { return fallback, nil }
 	parsed, err := strconv.Atoi(value)
+	if err != nil { return 0, fmt.Errorf("parse %s: %w", key, err) }
+	return parsed, nil
+}
+`
+}
+
+func postgresFile(modulePath string) string {
+	return fmt.Sprintf(`package storage
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+
+	_ "github.com/jackc/pgx/v5/stdlib"
+
+	"%s/internal/platform/config"
+)
+
+func OpenPostgres(ctx context.Context, cfg config.DatabaseConfig) (*sql.DB, error) {
+	db, err := sql.Open("pgx", cfg.DSN)
 	if err != nil {
-		return fallback
+		return nil, err
 	}
-	return parsed
+	db.SetMaxOpenConns(cfg.MaxOpenConns)
+	db.SetMaxIdleConns(cfg.MaxIdleConns)
+	db.SetConnMaxLifetime(cfg.ConnMaxLifetime)
+	pingCtx, cancel := context.WithTimeout(ctx, cfg.ConnectTimeout)
+	defer cancel()
+	if err := db.PingContext(pingCtx); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("ping postgres: %%w", err)
+	}
+	return db, nil
+}
+
+func Ping(ctx context.Context, db *sql.DB) error {
+	return db.PingContext(ctx)
+}
+`, modulePath)
+}
+
+func redisFile(modulePath string) string {
+	return fmt.Sprintf(`package cache
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/redis/go-redis/v9"
+
+	"%s/internal/platform/config"
+)
+
+func OpenRedis(ctx context.Context, cfg config.RedisConfig) (*redis.Client, error) {
+	client := redis.NewClient(&redis.Options{
+		Addr:     cfg.Addr,
+		Password: cfg.Password,
+		DB:       cfg.DB,
+		PoolSize: cfg.PoolSize,
+	})
+	pingCtx, cancel := context.WithTimeout(ctx, cfg.ConnectTimeout)
+	defer cancel()
+	if err := client.Ping(pingCtx).Err(); err != nil {
+		client.Close()
+		return nil, fmt.Errorf("ping redis: %%w", err)
+	}
+	return client, nil
+}
+
+func Ping(ctx context.Context, client *redis.Client) error {
+	return client.Ping(ctx).Err()
+}
+`, modulePath)
+}
+
+func loggerFile(modulePath string) string {
+	return fmt.Sprintf(`package observability
+
+import (
+	"log/slog"
+	"os"
+
+	"%s/internal/platform/config"
+)
+
+func NewLogger(cfg config.ObservabilityConfig) *slog.Logger {
+	options := &slog.HandlerOptions{Level: slog.LevelInfo}
+	return slog.New(slog.NewJSONHandler(os.Stdout, options)).With("service", cfg.ServiceName)
+}
+`, modulePath)
+}
+
+func routerFile() string {
+	return `package server
+
+import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+)
+
+func registerRoutes(engine *gin.Engine, ready Readiness) {
+	engine.GET("/healthz", func(c *gin.Context) {
+		c.JSON(http.StatusOK, Response{Code: "OK", Message: "healthy"})
+	})
+	engine.GET("/readyz", func(c *gin.Context) {
+		if err := ready(c.Request.Context()); err != nil {
+			c.JSON(http.StatusServiceUnavailable, Response{Code: "NOT_READY", Message: err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, Response{Code: "OK", Message: "ready"})
+	})
+}
+`
+}
+
+func responseServerFile() string {
+	return `package server
+
+type Response struct {
+	Code    string ` + "`json:\"code\"`" + `
+	Message string ` + "`json:\"message\"`" + `
+	Data    any    ` + "`json:\"data,omitempty\"`" + `
+}
+`
+}
+
+func httpServerFile(modulePath string) string {
+	return fmt.Sprintf(`package server
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"time"
+
+	"github.com/gin-gonic/gin"
+
+	"%s/internal/platform/config"
+	"%s/internal/platform/middleware"
+)
+
+type Readiness func(context.Context) error
+
+type Dependencies struct { Ready Readiness }
+
+type HTTPServer struct {
+	server          *http.Server
+	shutdownTimeout time.Duration
+}
+
+func NewHTTPServer(cfg config.Config, logger *slog.Logger, deps Dependencies) *HTTPServer {
+	if cfg.App.Env == "production" { gin.SetMode(gin.ReleaseMode) }
+	engine := gin.New()
+	engine.Use(
+		middleware.RequestID(),
+		middleware.Recovery(logger),
+		middleware.AccessLog(logger),
+		middleware.Timeout(cfg.HTTP.RequestTimeout),
+		middleware.BodyLimit(cfg.HTTP.BodyLimit),
+		middleware.CORS(cfg.HTTP.AllowedOrigins),
+		middleware.OTel(cfg.Observability.ServiceName),
+	)
+	ready := deps.Ready
+	if ready == nil { ready = func(context.Context) error { return nil } }
+	registerRoutes(engine, ready)
+	return &HTTPServer{shutdownTimeout: cfg.App.ShutdownTimeout, server: &http.Server{
+		Addr: fmt.Sprintf(":%%d", cfg.App.Port), Handler: engine,
+		ReadTimeout: cfg.HTTP.ReadTimeout, WriteTimeout: cfg.HTTP.WriteTimeout,
+		IdleTimeout: cfg.HTTP.IdleTimeout,
+	}}
+}
+
+func (s *HTTPServer) Run(ctx context.Context) error {
+	errs := make(chan error, 1)
+	go func() {
+		err := s.server.ListenAndServe()
+		if err != nil && !errors.Is(err, http.ErrServerClosed) { errs <- err; return }
+		errs <- nil
+	}()
+	select {
+	case err := <-errs:
+		return err
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), s.shutdownTimeout)
+		defer cancel()
+		return s.server.Shutdown(shutdownCtx)
+	}
+}
+`, modulePath, modulePath)
+}
+
+func requestIDMiddlewareFile() string {
+	return `package middleware
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+
+	"github.com/gin-gonic/gin"
+)
+
+const RequestIDHeader = "X-Request-ID"
+
+func RequestID() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		requestID := c.GetHeader(RequestIDHeader)
+		if requestID == "" { requestID = newRequestID() }
+		c.Set(RequestIDHeader, requestID)
+		c.Header(RequestIDHeader, requestID)
+		c.Next()
+	}
+}
+
+func newRequestID() string {
+	value := make([]byte, 16)
+	if _, err := rand.Read(value); err != nil { return "request-id-unavailable" }
+	return hex.EncodeToString(value)
+}
+`
+}
+
+func recoveryMiddlewareFile() string {
+	return `package middleware
+
+import (
+	"log/slog"
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+)
+
+func Recovery(logger *slog.Logger) gin.HandlerFunc {
+	return gin.CustomRecovery(func(c *gin.Context, recovered any) {
+		logger.Error("panic recovered", "request_id", c.GetString(RequestIDHeader), "error", recovered)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"code": "INTERNAL", "message": "internal server error"})
+	})
+}
+`
+}
+
+func timeoutMiddlewareFile() string {
+	return `package middleware
+
+import (
+	"context"
+	"net/http"
+	"time"
+
+	"github.com/gin-gonic/gin"
+)
+
+func Timeout(timeout time.Duration) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if timeout <= 0 { c.Next(); return }
+		ctx, cancel := context.WithTimeout(c.Request.Context(), timeout)
+		defer cancel()
+		c.Request = c.Request.WithContext(ctx)
+		c.Next()
+		if ctx.Err() == context.DeadlineExceeded && !c.Writer.Written() {
+			c.AbortWithStatusJSON(http.StatusGatewayTimeout, gin.H{"code": "TIMEOUT", "message": "request timeout"})
+		}
+	}
+}
+`
+}
+
+func accessLogMiddlewareFile() string {
+	return `package middleware
+
+import (
+	"log/slog"
+	"time"
+
+	"github.com/gin-gonic/gin"
+)
+
+func AccessLog(logger *slog.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		started := time.Now()
+		c.Next()
+		logger.Info("http request",
+			"request_id", c.GetString(RequestIDHeader), "method", c.Request.Method,
+			"path", c.Request.URL.Path, "status", c.Writer.Status(),
+			"latency", time.Since(started).String(), "client_ip", c.ClientIP(),
+		)
+	}
+}
+`
+}
+
+func bodyLimitMiddlewareFile() string {
+	return `package middleware
+
+import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+)
+
+func BodyLimit(limit int64) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if limit > 0 { c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, limit) }
+		c.Next()
+	}
+}
+`
+}
+
+func corsMiddlewareFile() string {
+	return `package middleware
+
+import (
+	"net/http"
+	"strings"
+
+	"github.com/gin-gonic/gin"
+)
+
+func CORS(allowedOrigins []string) gin.HandlerFunc {
+	allowed := make(map[string]struct{}, len(allowedOrigins))
+	for _, origin := range allowedOrigins { allowed[origin] = struct{}{} }
+	return func(c *gin.Context) {
+		origin := c.GetHeader("Origin")
+		if _, ok := allowed[origin]; ok {
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Vary", "Origin")
+			c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID")
+			c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+		}
+		if c.Request.Method == http.MethodOptions && origin != "" {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+		c.Next()
+	}
+}
+
+func ParseOrigins(value string) []string {
+	if value == "" { return nil }
+	return strings.Split(value, ",")
+}
+`
+}
+
+func authMiddlewareFile(modulePath string) string {
+	return fmt.Sprintf(`package middleware
+
+import (
+	"errors"
+	"net/http"
+	"strings"
+
+	"github.com/gin-gonic/gin"
+
+	"%s/internal/platform/auth"
+)
+
+type PrincipalResolver func(token string) (auth.Principal, error)
+
+func Authenticate(resolve PrincipalResolver) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		token, err := bearerToken(c.GetHeader("Authorization"))
+		if err != nil { c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": "UNAUTHORIZED", "message": err.Error()}); return }
+		principal, err := resolve(token)
+		if err != nil { c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": "UNAUTHORIZED", "message": "invalid token"}); return }
+		c.Set("principal", principal)
+		c.Next()
+	}
+}
+
+func bearerToken(header string) (string, error) {
+	parts := strings.Fields(header)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || parts[1] == "" { return "", errors.New("bearer token required") }
+	return parts[1], nil
+}
+`, modulePath)
+}
+
+func rateLimitMiddlewareFile() string {
+	return `package middleware
+
+import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+)
+
+type Limiter interface { Allow(key string) bool }
+
+func RateLimit(limiter Limiter) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if limiter != nil && !limiter.Allow(c.ClientIP()) {
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"code": "RATE_LIMITED", "message": "too many requests"})
+			return
+		}
+		c.Next()
+	}
+}
+`
+}
+
+func otelMiddlewareFile() string {
+	return `package middleware
+
+import (
+	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/otel"
+)
+
+func OTel(serviceName string) gin.HandlerFunc {
+	tracer := otel.Tracer(serviceName)
+	return func(c *gin.Context) {
+		ctx, span := tracer.Start(c.Request.Context(), c.Request.Method+" "+c.Request.URL.Path)
+		defer span.End()
+		c.Request = c.Request.WithContext(ctx)
+		c.Next()
+	}
 }
 `
 }
@@ -786,8 +1318,9 @@ func entClientFile() string {
 
 type Client struct{}
 
-func Open(dsn string) (*Client, error) {
-	_ = dsn
+func Open(driver string, dataSourceName string) (*Client, error) {
+	_ = driver
+	_ = dataSourceName
 	return &Client{}, nil
 }
 

@@ -26,9 +26,16 @@ func TestGenerateProject(t *testing.T) {
 	mustExist(t, root, "Makefile")
 	mustExist(t, root, "main.go")
 	mustExist(t, root, "internal/platform/cmd/server.go")
+	mustExist(t, root, "internal/platform/storage/postgres.go")
+	mustExist(t, root, "internal/platform/cache/redis.go")
+	mustExist(t, root, "internal/platform/server/http_server.go")
+	mustExist(t, root, "internal/platform/middleware/body_limit.go")
 	mustExist(t, root, "internal/platform/storage/ent/generate.go")
 	mustExist(t, root, "internal/platform/storage/ent/schema/test_record.go")
 	mustExist(t, root, "internal/platform/storage/ent/tools.go")
+	mustExist(t, root, "api/proto/platform/v1/health.proto")
+	mustExist(t, root, "buf.yaml")
+	mustExist(t, root, "buf.gen.yaml")
 	mustExist(t, root, "hack/hack.mk")
 	mustExist(t, root, "manifest/config/config.local.yaml")
 	mustExist(t, root, "internal/controller/agents/agents_new.go")
@@ -53,8 +60,18 @@ func TestGenerateProjectPreservesHyphenatedName(t *testing.T) {
 	if !strings.Contains(string(content), "module gap-test") {
 		t.Fatalf("expected hyphenated module name, got:\n%s", content)
 	}
-	if !strings.Contains(string(content), "require entgo.io/ent v0.14.6") {
+	if !strings.Contains(string(content), "entgo.io/ent v0.14.6") {
 		t.Fatalf("expected the default Ent dependency, got:\n%s", content)
+	}
+	for _, dependency := range []string{
+		"github.com/gin-gonic/gin v1.12.0",
+		"github.com/jackc/pgx/v5 v5.10.0",
+		"github.com/redis/go-redis/v9 v9.22.0",
+		"github.com/spf13/viper v1.21.0",
+	} {
+		if !strings.Contains(string(content), dependency) {
+			t.Fatalf("expected dependency %q, got:\n%s", dependency, content)
+		}
 	}
 }
 
@@ -106,6 +123,8 @@ func TestGeneratedEntCommandsUsePlatformStoragePath(t *testing.T) {
 		"go run -mod=mod entgo.io/ent/cmd/ent init --target internal/platform/storage/ent/schema $${NAME}",
 		"go run -mod=mod entgo.io/ent/cmd/ent generate ./internal/platform/storage/ent/schema",
 		"Ent schema is empty; skipped Ent generation",
+		"proto-gen:",
+		"buf generate",
 	} {
 		if !strings.Contains(content, expected) {
 			t.Fatalf("expected Ent command %q in generated hack.mk:\n%s", expected, content)

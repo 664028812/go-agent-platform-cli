@@ -10,7 +10,7 @@ import (
 	"sail/sail-golang-game-base/go-agent-platform-cli/internal/scaffold"
 )
 
-const version = "0.4.1"
+const version = "0.5.0"
 
 func main() {
 	if len(os.Args) < 2 {
