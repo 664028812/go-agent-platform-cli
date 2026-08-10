@@ -167,8 +167,10 @@ require (
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/spf13/viper v1.21.0
 	go.opentelemetry.io/otel v1.45.0
+	go.uber.org/zap v1.27.1
 	google.golang.org/grpc v1.83.0
 	google.golang.org/protobuf v1.36.11
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 `, modulePath)
 }
@@ -240,7 +242,7 @@ Data Layer: Ent
 Cache: Redis + go-redis
 Async Jobs: PostgreSQL durable jobs first
 Agent: Eino
-Observability: slog + OpenTelemetry + Prometheus
+Observability: Uber Zap + OpenTelemetry + Prometheus
 Layering: api / controller / service / logic / model / dao
 ~~~
 
@@ -325,6 +327,8 @@ deps:
 	go get github.com/redis/go-redis/v9
 	go get github.com/jackc/pgx/v5
 	go get go.opentelemetry.io/otel
+	go get go.uber.org/zap
+	go get gopkg.in/natefinch/lumberjack.v2
 	go get github.com/prometheus/client_golang/prometheus
 	go get google.golang.org/grpc
 	go get google.golang.org/protobuf
@@ -372,6 +376,8 @@ REDIS_ADDR=localhost:6379
 REDIS_PASSWORD=
 REDIS_DB=0
 HTTP_ALLOWED_ORIGINS=http://localhost:3000
+LOG_LEVEL=info
+LOG_FILE=logs/app.log
 JWT_SECRET=local-dev-secret
 EINO_PROVIDER=mock
 EINO_MODEL=mock-chat
@@ -431,6 +437,15 @@ observability:
   service_name: go-agent-platform
   otlp_endpoint: localhost:4317
   metrics_port: 9090
+
+logging:
+  level: info
+  format: json
+  file: logs/app.log
+  max_size_mb: 100
+  max_backups: 10
+  max_age_days: 30
+  compress: true
 `, env)
 }
 
@@ -523,7 +538,11 @@ func Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	logger := observability.NewLogger(cfg.Observability)
+	logger, err := observability.NewLogger(cfg.Logging, cfg.Observability.ServiceName)
+	if err != nil {
+		return fmt.Errorf("initialize logger: %%w", err)
+	}
+	defer logger.Sync()
 	db, err := storage.OpenPostgres(ctx, cfg.Database)
 	if err != nil {
 		return fmt.Errorf("open postgres: %%w", err)
@@ -654,6 +673,7 @@ type Config struct {
 	Worker        WorkerConfig        ` + "`mapstructure:\"worker\"`" + `
 	Eino          EinoConfig          ` + "`mapstructure:\"eino\"`" + `
 	Observability ObservabilityConfig ` + "`mapstructure:\"observability\"`" + `
+	Logging       LoggingConfig       ` + "`mapstructure:\"logging\"`" + `
 }
 
 type AppConfig struct {
@@ -714,6 +734,16 @@ type ObservabilityConfig struct {
 	OTLPEndpoint string ` + "`mapstructure:\"otlp_endpoint\"`" + `
 	MetricsPort  int    ` + "`mapstructure:\"metrics_port\"`" + `
 }
+
+type LoggingConfig struct {
+	Level      string ` + "`mapstructure:\"level\"`" + `
+	Format     string ` + "`mapstructure:\"format\"`" + `
+	File       string ` + "`mapstructure:\"file\"`" + `
+	MaxSizeMB  int    ` + "`mapstructure:\"max_size_mb\"`" + `
+	MaxBackups int    ` + "`mapstructure:\"max_backups\"`" + `
+	MaxAgeDays int    ` + "`mapstructure:\"max_age_days\"`" + `
+	Compress   bool   ` + "`mapstructure:\"compress\"`" + `
+}
 `
 }
 
@@ -770,6 +800,8 @@ func applyEnv(cfg *Config) error {
 	cfg.Eino.Provider = envString("EINO_PROVIDER", cfg.Eino.Provider)
 	cfg.Eino.Model = envString("EINO_MODEL", cfg.Eino.Model)
 	cfg.Observability.OTLPEndpoint = envString("OTLP_ENDPOINT", cfg.Observability.OTLPEndpoint)
+	cfg.Logging.Level = envString("LOG_LEVEL", cfg.Logging.Level)
+	cfg.Logging.File = envString("LOG_FILE", cfg.Logging.File)
 	var err error
 	if cfg.App.Port, err = envInt("APP_PORT", cfg.App.Port); err != nil { return err }
 	if cfg.Redis.DB, err = envInt("REDIS_DB", cfg.Redis.DB); err != nil { return err }
@@ -865,15 +897,30 @@ func loggerFile(modulePath string) string {
 	return fmt.Sprintf(`package observability
 
 import (
-	"log/slog"
 	"os"
+	"path/filepath"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 
 	"%s/internal/platform/config"
 )
 
-func NewLogger(cfg config.ObservabilityConfig) *slog.Logger {
-	options := &slog.HandlerOptions{Level: slog.LevelInfo}
-	return slog.New(slog.NewJSONHandler(os.Stdout, options)).With("service", cfg.ServiceName)
+func NewLogger(cfg config.LoggingConfig, serviceName string) (*zap.Logger, error) {
+	level := zap.NewAtomicLevel()
+	if err := level.UnmarshalText([]byte(cfg.Level)); err != nil { return nil, err }
+	encoderConfig := zap.NewProductionEncoderConfig()
+	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	encoder := zapcore.NewJSONEncoder(encoderConfig)
+	if cfg.Format == "console" { encoder = zapcore.NewConsoleEncoder(encoderConfig) }
+	cores := []zapcore.Core{zapcore.NewCore(encoder, zapcore.AddSync(os.Stdout), level)}
+	if cfg.File != "" {
+		if err := os.MkdirAll(filepath.Dir(cfg.File), 0o755); err != nil { return nil, err }
+		fileWriter := &lumberjack.Logger{Filename: cfg.File, MaxSize: cfg.MaxSizeMB, MaxBackups: cfg.MaxBackups, MaxAge: cfg.MaxAgeDays, Compress: cfg.Compress}
+		cores = append(cores, zapcore.NewCore(encoder, zapcore.AddSync(fileWriter), level))
+	}
+	return zap.New(zapcore.NewTee(cores...), zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel)).With(zap.String("service", serviceName)), nil
 }
 `, modulePath)
 }
@@ -920,11 +967,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 
 	"%s/internal/platform/config"
 	"%s/internal/platform/middleware"
@@ -939,7 +986,7 @@ type HTTPServer struct {
 	shutdownTimeout time.Duration
 }
 
-func NewHTTPServer(cfg config.Config, logger *slog.Logger, deps Dependencies) *HTTPServer {
+func NewHTTPServer(cfg config.Config, logger *zap.Logger, deps Dependencies) *HTTPServer {
 	if cfg.App.Env == "production" { gin.SetMode(gin.ReleaseMode) }
 	engine := gin.New()
 	engine.Use(
@@ -1014,15 +1061,15 @@ func recoveryMiddlewareFile() string {
 	return `package middleware
 
 import (
-	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
-func Recovery(logger *slog.Logger) gin.HandlerFunc {
+func Recovery(logger *zap.Logger) gin.HandlerFunc {
 	return gin.CustomRecovery(func(c *gin.Context, recovered any) {
-		logger.Error("panic recovered", "request_id", c.GetString(RequestIDHeader), "error", recovered)
+		logger.Error("panic recovered", zap.String("request_id", c.GetString(RequestIDHeader)), zap.Any("error", recovered))
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"code": "INTERNAL", "message": "internal server error"})
 	})
 }
@@ -1059,21 +1106,17 @@ func accessLogMiddlewareFile() string {
 	return `package middleware
 
 import (
-	"log/slog"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
-func AccessLog(logger *slog.Logger) gin.HandlerFunc {
+func AccessLog(logger *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		started := time.Now()
 		c.Next()
-		logger.Info("http request",
-			"request_id", c.GetString(RequestIDHeader), "method", c.Request.Method,
-			"path", c.Request.URL.Path, "status", c.Writer.Status(),
-			"latency", time.Since(started).String(), "client_ip", c.ClientIP(),
-		)
+		logger.Info("http request", zap.String("request_id", c.GetString(RequestIDHeader)), zap.String("method", c.Request.Method), zap.String("path", c.Request.URL.Path), zap.Int("status", c.Writer.Status()), zap.Duration("latency", time.Since(started)), zap.String("client_ip", c.ClientIP()))
 	}
 }
 `

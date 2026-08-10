@@ -68,6 +68,8 @@ func TestGenerateProjectPreservesHyphenatedName(t *testing.T) {
 		"github.com/jackc/pgx/v5 v5.10.0",
 		"github.com/redis/go-redis/v9 v9.22.0",
 		"github.com/spf13/viper v1.21.0",
+		"go.uber.org/zap v1.27.1",
+		"gopkg.in/natefinch/lumberjack.v2 v2.2.1",
 	} {
 		if !strings.Contains(string(content), dependency) {
 			t.Fatalf("expected dependency %q, got:\n%s", dependency, content)

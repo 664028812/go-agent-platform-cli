@@ -43,7 +43,7 @@ Data Layer: Ent
 Cache: Redis + go-redis
 Async Jobs: PostgreSQL durable jobs first
 Agent: Eino
-Observability: slog + OpenTelemetry + Prometheus
+Observability: Uber Zap + OpenTelemetry + Prometheus
 Layering: api / controller / service / logic / model / dao
 ```
 
@@ -79,4 +79,4 @@ make clean
 
 生成出来的平台工程也会自带 `Makefile` 和 `hack/*.mk`，包含 `ctrl`、`service`、`dao`、`run`、`deps`、`ent-new`、`ent-gen`、`compose-up` 等项目命令。模板内置 `internal/platform/storage/ent/schema/test_record.go` 作为 Ent 生成测试表；运行 `make ent-gen` 可验证生成链路，正式实体使用 `make ent-new NAME=Commission` 创建。
 
-新项目先执行 `make deps`，然后执行 `make ent-gen`。模板会初始化 Viper 配置加载、PostgreSQL/Redis Ping、Gin HTTP 服务和基础中间件。Protobuf 源文件在 `api/proto/<domain>/v1`，Buf 生成代码在 `api/gen/go`，使用 `make proto-lint` 和 `make proto-gen`。
+新项目先执行 `make deps`，然后执行 `make ent-gen`。模板会初始化 Viper 配置加载、PostgreSQL/Redis Ping、Gin HTTP 服务和基础中间件。日志使用 Uber Zap，同时输出到标准输出和配置的滚动日志文件。Protobuf 源文件在 `api/proto/<domain>/v1`，Buf 生成代码在 `api/gen/go`，使用 `make proto-lint` 和 `make proto-gen`。

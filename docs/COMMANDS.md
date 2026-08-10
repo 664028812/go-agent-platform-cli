@@ -83,9 +83,11 @@ docker compose -f manifest/docker/docker-compose.yml up -d
 make run
 ```
 
-`make deps` 固定并下载 Gin、Viper、pgx、Redis、Ent、OpenTelemetry 和 Protobuf 依赖，同时更新 `go.sum`。服务启动路径会：加载 Viper YAML 配置并应用环境变量覆盖，连接并 Ping PostgreSQL，连接并 Ping Redis，随后启动 Gin。任一基础设施不可用时进程会返回错误，不会错误地报告服务已就绪。
+`make deps` 固定并下载 Gin、Viper、pgx、Redis、Ent、OpenTelemetry、Uber Zap 和 Protobuf 依赖，同时更新 `go.sum`。服务启动路径会：加载 Viper YAML 配置并应用环境变量覆盖，连接并 Ping PostgreSQL，连接并 Ping Redis，随后启动 Gin。任一基础设施不可用时进程会返回错误，不会错误地报告服务已就绪。
 
 Gin 默认注册 `/healthz` 与 `/readyz`。`/readyz` 会检查 PostgreSQL 和 Redis；中间件依次提供 request ID、panic recovery、结构化访问日志、请求超时、body 限制、CORS 与 OpenTelemetry span。认证和限流中间件作为可注入扩展点，业务路由按权限策略自行挂载。
+
+日志配置位于 `manifest/config/config.<env>.yaml` 的 `logging` 段。默认使用 JSON 格式，以 Zap 同时写入 stdout 和 `logs/app.log`；文件按 100MB 轮转，保留 10 份、30 天并压缩。环境变量 `LOG_LEVEL`、`LOG_FILE` 可以覆盖 level 和路径。
 
 ## 生成完整模块
 
