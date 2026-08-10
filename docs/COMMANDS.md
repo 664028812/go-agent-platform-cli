@@ -1,6 +1,6 @@
 # gap 命令文档
 
-`gap` 是独立脚手架 `go-agent-platform-cli` 编译出的命令。当前版本为 `0.5.0`。
+`gap` 是独立脚手架 `go-agent-platform-cli` 编译出的命令。当前版本为 `0.5.2`。
 
 它参考 `/Users/mac/Projects/sail/earn/app/server`，将该目录视为一个独立工程根：
 
@@ -50,6 +50,7 @@ make build
 | `-root` | 目标项目根目录，默认当前目录。 |
 | `-module` | 项目 Go module；模块命令默认读取 `go.mod`。 |
 | `-dir` | `project` 的输出目录。 |
+| `-deps` | `project` 后执行 `go mod tidy` 并生成完整 `go.sum`，默认 `true`；离线时使用 `-deps=false`。 |
 | `-force` | 覆盖已存在的生成文件。 |
 
 旧参数 `-app` 仅为兼容保留，已经没有路径作用。
@@ -71,19 +72,24 @@ make build
 
 项目名中的 `-` 会原样保留。
 
+`gap project` 默认会在文件生成后执行一次 `go mod tidy`，将 Gin、Viper、Redis、Zap、Ent 等依赖及其校验和写入新项目的 `go.mod/go.sum`。因此项目创建完成后可以直接运行 `go test ./...`。离线创建时使用：
+
+```bash
+./bin/gap project gap-test -deps=false
+```
+
 ## 初始化与启动
 
 新项目在首次使用时执行：
 
 ```bash
 cd gap-test
-make deps
 make ent-gen
 docker compose -f manifest/docker/docker-compose.yml up -d
 make run
 ```
 
-`make deps` 固定并下载 Gin、Viper、pgx、Redis、Ent、OpenTelemetry、Uber Zap 和 Protobuf 依赖，同时更新 `go.sum`。服务启动路径会：加载 Viper YAML 配置并应用环境变量覆盖，连接并 Ping PostgreSQL，连接并 Ping Redis，随后启动 Gin。任一基础设施不可用时进程会返回错误，不会错误地报告服务已就绪。
+`gap project` 已固定并下载 Gin、Viper、pgx、Redis、Ent、OpenTelemetry、Uber Zap 和 Protobuf 依赖，同时写入完整 `go.sum`。`make deps` 仍可用于手动刷新依赖。服务启动路径会：加载 Viper YAML 配置并应用环境变量覆盖，连接并 Ping PostgreSQL，连接并 Ping Redis，随后启动 Gin。任一基础设施不可用时进程会返回错误，不会错误地报告服务已就绪。
 
 Gin 默认注册 `/healthz` 与 `/readyz`。`/readyz` 会检查 PostgreSQL 和 Redis；中间件依次提供 request ID、panic recovery、结构化访问日志、请求超时、body 限制、CORS 与 OpenTelemetry span。认证和限流中间件作为可注入扩展点，业务路由按权限策略自行挂载。
 

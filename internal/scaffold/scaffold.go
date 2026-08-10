@@ -21,6 +21,7 @@ type ProjectSpec struct {
 	Module string
 	Dir    string
 	Force  bool
+	Deps   bool
 }
 
 type ModuleSpec struct {

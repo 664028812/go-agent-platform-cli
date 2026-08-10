@@ -40,6 +40,7 @@ func projectDirs() []string {
 		"internal/platform/cache",
 		"internal/platform/queue",
 		"internal/platform/observability",
+		"internal/platform/tools",
 		"internal/agent/eino",
 		"internal/agent/tools",
 		"internal/agent/knowledge",
@@ -119,6 +120,7 @@ package ent
 
 import _ "entgo.io/ent/cmd/ent"
 `,
+		"internal/platform/tools/tools.go":        dependencyToolsFile(),
 		"internal/platform/storage/ent/client.go": entClientFile(),
 		"internal/platform/storage/ent/tx.go":     `package ent` + "\n\n" + `type Tx struct{}` + "\n",
 		"internal/platform/storage/postgres.go":   postgresFile(modulePath),
@@ -178,6 +180,18 @@ require (
 func projectGoSum() string {
 	return `entgo.io/ent v0.14.6 h1:/f2696BpwuWAEEG6PVGWflg6+Inrpq4pRWuNlWz/Skk=
 entgo.io/ent v0.14.6/go.mod h1:z46QBUdGC+BATwsedbDuREfSS0oSCV+csdEYlL4p73s=
+`
+}
+
+func dependencyToolsFile() string {
+	return `//go:build tools
+
+package tools
+
+import (
+	_ "google.golang.org/grpc"
+	_ "google.golang.org/protobuf/proto"
+)
 `
 }
 

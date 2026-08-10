@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 
 	"sail/sail-golang-game-base/go-agent-platform-cli/internal/scaffold"
 )
 
-const version = "0.5.0"
+const version = "0.5.2"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -47,6 +48,12 @@ func projectCmd(args []string) {
 	if err != nil {
 		fail(err)
 	}
+	if spec.Deps {
+		if err := bootstrapDependencies(result.Root); err != nil {
+			fail(err)
+		}
+		fmt.Println("dependencies: go mod tidy complete")
+	}
 	printResult("project", result)
 }
 
@@ -57,6 +64,7 @@ func parseProjectSpec(args []string) (scaffold.ProjectSpec, error) {
 	modulePath := fs.String("module", "", "go module path, for example: example.com/go-agent-platform")
 	dir := fs.String("dir", "", "target directory")
 	force := fs.Bool("force", false, "overwrite existing files")
+	deps := fs.Bool("deps", true, "run go mod tidy after generating the project")
 	flagArgs, positionalArgs := splitProjectArgs(args)
 	if err := fs.Parse(flagArgs); err != nil {
 		return scaffold.ProjectSpec{}, err
@@ -83,7 +91,19 @@ func parseProjectSpec(args []string) (scaffold.ProjectSpec, error) {
 		Module: *modulePath,
 		Dir:    *dir,
 		Force:  *force,
+		Deps:   *deps,
 	}, nil
+}
+
+func bootstrapDependencies(root string) error {
+	command := exec.Command("go", "mod", "tidy")
+	command.Dir = root
+	command.Env = append(os.Environ(), "GOCACHE=/tmp/go-agent-platform-cache")
+	output, err := command.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("bootstrap project dependencies: %w\n%s", err, output)
+	}
+	return nil
 }
 
 func splitProjectArgs(args []string) ([]string, []string) {
@@ -206,6 +226,7 @@ func usage() {
 Usage:
   gap project gap-test
   gap project gap-test -module example.com/gap-test -dir ./gap-test
+  gap project gap-test -deps=false  # create without downloading dependencies
   gap project -name go-agent-platform -module example.com/go-agent-platform -dir ./go-agent-platform
   gap module  -name orders -root ./go-agent-platform
   gap ctrl    [-name orders] -root ./go-agent-platform
@@ -222,6 +243,7 @@ Commands:
 
 Flags:
   -force       overwrite existing files
+	-deps        run go mod tidy after project generation (default true)
 `)
 	os.Exit(0)
 }

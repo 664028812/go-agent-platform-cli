@@ -33,6 +33,7 @@ func TestGenerateProject(t *testing.T) {
 	mustExist(t, root, "internal/platform/storage/ent/generate.go")
 	mustExist(t, root, "internal/platform/storage/ent/schema/test_record.go")
 	mustExist(t, root, "internal/platform/storage/ent/tools.go")
+	mustExist(t, root, "internal/platform/tools/tools.go")
 	mustExist(t, root, "api/proto/platform/v1/health.proto")
 	mustExist(t, root, "buf.yaml")
 	mustExist(t, root, "buf.gen.yaml")
