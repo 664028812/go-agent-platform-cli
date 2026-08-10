@@ -391,7 +391,14 @@ REDIS_PASSWORD=
 REDIS_DB=0
 HTTP_ALLOWED_ORIGINS=http://localhost:3000
 LOG_LEVEL=info
-LOG_FILE=logs/app.log
+LOG_CONSOLE=true
+LOG_FILE_ENABLED=true
+LOG_FILE_PATH=logs/app.log
+LOG_FILE_MAX_SIZE_MB=100
+LOG_FILE_MAX_BACKUPS=10
+LOG_FILE_MAX_AGE_DAYS=90
+LOG_FILE_COMPRESS=false
+LOG_FILE_LOCAL_TIME=true
 JWT_SECRET=local-dev-secret
 EINO_PROVIDER=mock
 EINO_MODEL=mock-chat
@@ -455,11 +462,15 @@ observability:
 logging:
   level: info
   format: json
-  file: logs/app.log
-  max_size_mb: 100
-  max_backups: 10
-  max_age_days: 30
-  compress: true
+  console: true
+  file:
+    enabled: true
+    path: logs/app.log
+    max_size_mb: 100
+    max_backups: 10
+    max_age_days: 90
+    compress: false
+    local_time: true
 `, env)
 }
 
@@ -750,13 +761,20 @@ type ObservabilityConfig struct {
 }
 
 type LoggingConfig struct {
-	Level      string ` + "`mapstructure:\"level\"`" + `
-	Format     string ` + "`mapstructure:\"format\"`" + `
-	File       string ` + "`mapstructure:\"file\"`" + `
+	Level   string        ` + "`mapstructure:\"level\"`" + `
+	Format  string        ` + "`mapstructure:\"format\"`" + `
+	Console bool          ` + "`mapstructure:\"console\"`" + `
+	File    FileLogConfig ` + "`mapstructure:\"file\"`" + `
+}
+
+type FileLogConfig struct {
+	Enabled    bool   ` + "`mapstructure:\"enabled\"`" + `
+	Path       string ` + "`mapstructure:\"path\"`" + `
 	MaxSizeMB  int    ` + "`mapstructure:\"max_size_mb\"`" + `
 	MaxBackups int    ` + "`mapstructure:\"max_backups\"`" + `
 	MaxAgeDays int    ` + "`mapstructure:\"max_age_days\"`" + `
 	Compress   bool   ` + "`mapstructure:\"compress\"`" + `
+	LocalTime  bool   ` + "`mapstructure:\"local_time\"`" + `
 }
 `
 }
@@ -804,6 +822,7 @@ func configPath() string {
 }
 
 func applyEnv(cfg *Config) error {
+	var err error
 	cfg.App.Env = envString("APP_ENV", cfg.App.Env)
 	cfg.App.Name = envString("APP_NAME", cfg.App.Name)
 	cfg.Database.DSN = envString("DATABASE_DSN", cfg.Database.DSN)
@@ -815,8 +834,14 @@ func applyEnv(cfg *Config) error {
 	cfg.Eino.Model = envString("EINO_MODEL", cfg.Eino.Model)
 	cfg.Observability.OTLPEndpoint = envString("OTLP_ENDPOINT", cfg.Observability.OTLPEndpoint)
 	cfg.Logging.Level = envString("LOG_LEVEL", cfg.Logging.Level)
-	cfg.Logging.File = envString("LOG_FILE", cfg.Logging.File)
-	var err error
+	if cfg.Logging.Console, err = envBool("LOG_CONSOLE", cfg.Logging.Console); err != nil { return err }
+	if cfg.Logging.File.Enabled, err = envBool("LOG_FILE_ENABLED", cfg.Logging.File.Enabled); err != nil { return err }
+	cfg.Logging.File.Path = envString("LOG_FILE_PATH", cfg.Logging.File.Path)
+	if cfg.Logging.File.MaxSizeMB, err = envInt("LOG_FILE_MAX_SIZE_MB", cfg.Logging.File.MaxSizeMB); err != nil { return err }
+	if cfg.Logging.File.MaxBackups, err = envInt("LOG_FILE_MAX_BACKUPS", cfg.Logging.File.MaxBackups); err != nil { return err }
+	if cfg.Logging.File.MaxAgeDays, err = envInt("LOG_FILE_MAX_AGE_DAYS", cfg.Logging.File.MaxAgeDays); err != nil { return err }
+	if cfg.Logging.File.Compress, err = envBool("LOG_FILE_COMPRESS", cfg.Logging.File.Compress); err != nil { return err }
+	if cfg.Logging.File.LocalTime, err = envBool("LOG_FILE_LOCAL_TIME", cfg.Logging.File.LocalTime); err != nil { return err }
 	if cfg.App.Port, err = envInt("APP_PORT", cfg.App.Port); err != nil { return err }
 	if cfg.Redis.DB, err = envInt("REDIS_DB", cfg.Redis.DB); err != nil { return err }
 	return nil
@@ -832,6 +857,14 @@ func envInt(key string, fallback int) (int, error) {
 	if value == "" { return fallback, nil }
 	parsed, err := strconv.Atoi(value)
 	if err != nil { return 0, fmt.Errorf("parse %s: %w", key, err) }
+	return parsed, nil
+}
+
+func envBool(key string, fallback bool) (bool, error) {
+	value := os.Getenv(key)
+	if value == "" { return fallback, nil }
+	parsed, err := strconv.ParseBool(value)
+	if err != nil { return false, fmt.Errorf("parse %s: %w", key, err) }
 	return parsed, nil
 }
 `
@@ -911,6 +944,7 @@ func loggerFile(modulePath string) string {
 	return fmt.Sprintf(`package observability
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -928,13 +962,27 @@ func NewLogger(cfg config.LoggingConfig, serviceName string) (*zap.Logger, error
 	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 	encoder := zapcore.NewJSONEncoder(encoderConfig)
 	if cfg.Format == "console" { encoder = zapcore.NewConsoleEncoder(encoderConfig) }
-	cores := []zapcore.Core{zapcore.NewCore(encoder, zapcore.AddSync(os.Stdout), level)}
-	if cfg.File != "" {
-		if err := os.MkdirAll(filepath.Dir(cfg.File), 0o755); err != nil { return nil, err }
-		fileWriter := &lumberjack.Logger{Filename: cfg.File, MaxSize: cfg.MaxSizeMB, MaxBackups: cfg.MaxBackups, MaxAge: cfg.MaxAgeDays, Compress: cfg.Compress}
-		cores = append(cores, zapcore.NewCore(encoder, zapcore.AddSync(fileWriter), level))
+	cores := make([]zapcore.Core, 0, 2)
+	if cfg.Console {
+		cores = append(cores, zapcore.NewCore(encoder, zapcore.Lock(zapcore.AddSync(os.Stdout)), level))
 	}
+	if cfg.File.Enabled {
+		fileWriter, err := getFileLogWriter(cfg.File)
+		if err != nil { return nil, err }
+		cores = append(cores, zapcore.NewCore(encoder, fileWriter, level))
+	}
+	if len(cores) == 0 { return nil, fmt.Errorf("logging requires console or file output") }
 	return zap.New(zapcore.NewTee(cores...), zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel)).With(zap.String("service", serviceName)), nil
+}
+
+func getFileLogWriter(cfg config.FileLogConfig) (zapcore.WriteSyncer, error) {
+	if cfg.Path == "" { return nil, fmt.Errorf("logging.file.path is required when file logging is enabled") }
+	if err := os.MkdirAll(filepath.Dir(cfg.Path), 0o755); err != nil { return nil, err }
+	fileWriter := &lumberjack.Logger{
+		Filename: cfg.Path, MaxSize: cfg.MaxSizeMB, MaxBackups: cfg.MaxBackups,
+		MaxAge: cfg.MaxAgeDays, Compress: cfg.Compress, LocalTime: cfg.LocalTime,
+	}
+	return zapcore.AddSync(fileWriter), nil
 }
 `, modulePath)
 }

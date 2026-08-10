@@ -78,6 +78,39 @@ func TestGenerateProjectPreservesHyphenatedName(t *testing.T) {
 	}
 }
 
+func TestGeneratedProjectConfiguresRotatingFileLogs(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "platform")
+	if _, err := GenerateProject(ProjectSpec{Name: "platform", Dir: root}); err != nil {
+		t.Fatal(err)
+	}
+
+	configContent, err := os.ReadFile(filepath.Join(root, "manifest", "config", "config.local.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{
+		"console: true", "file:", "enabled: true", "path: logs/app.log",
+		"max_age_days: 90", "local_time: true",
+	} {
+		if !strings.Contains(string(configContent), expected) {
+			t.Fatalf("expected logging config %q:\n%s", expected, configContent)
+		}
+	}
+
+	loggerContent, err := os.ReadFile(filepath.Join(root, "internal", "platform", "observability", "logger.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{
+		"func getFileLogWriter", "LocalTime: cfg.LocalTime",
+		"logging.file.path is required", "logging requires console or file output",
+	} {
+		if !strings.Contains(string(loggerContent), expected) {
+			t.Fatalf("expected generated logger content %q:\n%s", expected, loggerContent)
+		}
+	}
+}
+
 func TestGenerateProjectRejectsPathAsName(t *testing.T) {
 	_, err := GenerateProject(ProjectSpec{Name: "nested/gap-test", Dir: t.TempDir()})
 	if err == nil {

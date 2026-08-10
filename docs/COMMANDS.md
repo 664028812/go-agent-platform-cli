@@ -93,7 +93,7 @@ make run
 
 Gin 默认注册 `/healthz` 与 `/readyz`。`/readyz` 会检查 PostgreSQL 和 Redis；中间件依次提供 request ID、panic recovery、结构化访问日志、请求超时、body 限制、CORS 与 OpenTelemetry span。认证和限流中间件作为可注入扩展点，业务路由按权限策略自行挂载。
 
-日志配置位于 `manifest/config/config.<env>.yaml` 的 `logging` 段。默认使用 JSON 格式，以 Zap 同时写入 stdout 和 `logs/app.log`；文件按 100MB 轮转，保留 10 份、30 天并压缩。环境变量 `LOG_LEVEL`、`LOG_FILE` 可以覆盖 level 和路径。
+日志配置位于 `manifest/config/config.<env>.yaml` 的 `logging` 段。默认使用 JSON 格式，Zap 写入 stdout 和 `logs/app.log`。`logging.console` 可关闭标准输出；`logging.file.enabled` 可关闭文件输出。文件配置支持 `path`、`max_size_mb`、`max_backups`、`max_age_days`、`compress` 与 `local_time`，默认按 100MB 轮转，保留 10 份、90 天，使用本地时间且不压缩。环境变量可覆盖全部日志项：`LOG_LEVEL`、`LOG_CONSOLE`、`LOG_FILE_ENABLED`、`LOG_FILE_PATH`、`LOG_FILE_MAX_SIZE_MB`、`LOG_FILE_MAX_BACKUPS`、`LOG_FILE_MAX_AGE_DAYS`、`LOG_FILE_COMPRESS`、`LOG_FILE_LOCAL_TIME`。至少应保留 stdout 或文件其中一个输出。
 
 ## 生成完整模块
 
